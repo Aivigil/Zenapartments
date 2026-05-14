@@ -13,6 +13,7 @@ use App\Http\Controllers\Bookings\AdjustmentsController;
 use App\Http\Controllers\Payments\PaymentsController;
 use App\Http\Controllers\Statements\StatementsController;
 use App\Http\Controllers\Notifications\NotificationsController;
+use App\Http\Controllers\Reconciliation\ReconciliationController;
 use Illuminate\Support\Facades\Route;
 
 // Auth
@@ -60,6 +61,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('notifications', [NotificationsController::class, 'index'])->name('notifications.index');
     Route::get('notifications/{notificationLog}', [NotificationsController::class, 'show'])->name('notifications.show');
     Route::post('notifications/send-for-schedule', [NotificationsController::class, 'sendForSchedule'])->name('notifications.send-for-schedule');
+
+    // Reconciliation
+    Route::get('reconciliation', [ReconciliationController::class, 'index'])->name('reconciliation.index');
+    Route::post('reconciliation/upload', [ReconciliationController::class, 'upload'])->name('reconciliation.upload');
+    Route::get('reconciliation/suggested-bookings', [ReconciliationController::class, 'suggestedBookings'])->name('reconciliation.suggested-bookings');
+    Route::get('reconciliation/{import}', [ReconciliationController::class, 'show'])->name('reconciliation.show');
+    Route::post('reconciliation/lines/{line}/confirm', [ReconciliationController::class, 'confirm'])->name('reconciliation.confirm');
+    Route::post('reconciliation/lines/{line}/ignore', [ReconciliationController::class, 'ignore'])->name('reconciliation.ignore');
 });
 
 // Healthcheck (no auth) — for uptime monitors
