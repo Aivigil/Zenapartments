@@ -14,6 +14,7 @@ use App\Http\Controllers\Payments\PaymentsController;
 use App\Http\Controllers\Statements\StatementsController;
 use App\Http\Controllers\Notifications\NotificationsController;
 use App\Http\Controllers\Reconciliation\ReconciliationController;
+use App\Http\Controllers\Reports\ReportsController;
 use Illuminate\Support\Facades\Route;
 
 // Auth
@@ -69,6 +70,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('reconciliation/{import}', [ReconciliationController::class, 'show'])->name('reconciliation.show');
     Route::post('reconciliation/lines/{line}/confirm', [ReconciliationController::class, 'confirm'])->name('reconciliation.confirm');
     Route::post('reconciliation/lines/{line}/ignore', [ReconciliationController::class, 'ignore'])->name('reconciliation.ignore');
+
+    // Reports
+    Route::get('reports', fn () => redirect()->route('reports.collections'))->name('reports.index');
+    Route::get('reports/collections', [ReportsController::class, 'collections'])->name('reports.collections');
 });
 
 // Healthcheck (no auth) — for uptime monitors
