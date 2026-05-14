@@ -5,7 +5,7 @@
 
 ingress:
   - hostname: portal.zenretreatspk.com
-    service: http://10.10.0.30:80
+    service: http://10.10.0.50:80
     originRequest:
       noTLSVerify: true
       connectTimeout: 10s

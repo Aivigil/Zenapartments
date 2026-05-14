@@ -15,7 +15,7 @@ CPU_CORES=4
 RAM_MB=4096
 SWAP_MB=2048
 NET_BRIDGE=vmbr1
-NET_IP="10.10.0.30/24"
+NET_IP="10.10.0.50/24"
 NET_GW="10.10.0.1"
 
 # Generate a strong random root password (one-time — we add SSH keys in phase 2)

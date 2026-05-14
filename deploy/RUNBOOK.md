@@ -10,7 +10,7 @@ End-to-end deployment of the Zen Retreats Portal onto `aivigil-central-01` (Hetz
 | Proxmox host | aivigil-central-01 (`65.109.87.81:2222`) |
 | Container VMID | `210` |
 | Container hostname | `zenretreats-portal` |
-| Container internal IP | `10.10.0.30/24` (on `vmbr1`) |
+| Container internal IP | `10.10.0.50/24` (on `vmbr1`) |
 | OS | Ubuntu 24.04 LTS (LXC) |
 | Resources | 4 vCPU · 4 GB RAM · 40 GB disk |
 | App path | `/var/www/zenretreats-portal` |
@@ -67,7 +67,7 @@ scp -P 2222 -i ~/.ssh/muneeb-aivigil-central \
 sudo bash /tmp/01-create-lxc.sh
 ```
 
-The script creates VMID 210, mounts the Ubuntu 24.04 template, sets the static IP to 10.10.0.30, enables nesting (needed for Docker if we ever want it), starts the container, and waits for it to be reachable.
+The script creates VMID 210, mounts the Ubuntu 24.04 template, sets the static IP to 10.10.0.50, enables nesting (needed for Docker if we ever want it), starts the container, and waits for it to be reachable.
 
 When done you'll see `Container 210 ready` and the script prints a one-time root password. Note it but you'll only use it once — we add your SSH key in Phase 2.
 
@@ -215,7 +215,7 @@ Edit `/etc/cloudflared/config.yml` on the host (the file template is in this rep
 
 ```yaml
   - hostname: portal.zenretreatspk.com
-    service: http://10.10.0.30:80
+    service: http://10.10.0.50:80
     originRequest:
       noTLSVerify: true
       connectTimeout: 10s
