@@ -14,6 +14,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // The portal runs behind Cloudflare Tunnel — cloudflared terminates
+        // HTTPS at the edge and proxies HTTP to nginx. Trust the forwarded
+        // headers so Laravel detects the original request as HTTPS, generates
+        // https:// asset URLs, sets Secure cookies, and gets the client IP
+        // from CF-Connecting-IP (already handled in the nginx config).
+        $middleware->trustProxies(at: '*');
+
         $middleware->web(append: [
             HandleInertiaRequests::class,
             AuditActionMiddleware::class,

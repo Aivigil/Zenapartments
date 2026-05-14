@@ -8,7 +8,13 @@ set -euo pipefail
 VMID=210
 HOSTNAME=zenretreats-portal
 TEMPLATE_STORAGE=local
-TEMPLATE_NAME=ubuntu-24.04-standard_24.04-1_amd64.tar.zst
+# Detect the latest available Ubuntu 24.04 standard template. Proxmox bumps
+# minor revisions (24.04-1, -2, -3…) over time; hard-coding the filename
+# guarantees breakage. Fall back to a sensible default if detection fails.
+TEMPLATE_NAME="$(pveam available --section system 2>/dev/null \
+  | awk '/ubuntu-24.04-standard/ {print $2}' \
+  | sort -V | tail -1)"
+TEMPLATE_NAME="${TEMPLATE_NAME:-ubuntu-24.04-standard_24.04-2_amd64.tar.zst}"
 ROOTFS_STORAGE=local-lvm
 ROOTFS_SIZE=40
 CPU_CORES=4
