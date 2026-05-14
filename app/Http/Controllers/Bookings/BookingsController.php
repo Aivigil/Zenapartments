@@ -146,6 +146,7 @@ class BookingsController extends Controller
             'planTemplate:id,code,name,installment_count',
             'schedules',
             'payments' => fn ($q) => $q->where('status', 'posted')->orderByDesc('received_at'),
+            'adjustments' => fn ($q) => $q->orderByDesc('effective_on'),
         ]);
 
         $outstanding = $booking->outstandingMinor();
@@ -201,6 +202,20 @@ class BookingsController extends Controller
                     'currency' => 'PKR',
                     'bank_reference' => $p->bank_reference,
                 ]),
+                'adjustments' => $booking->adjustments->map(fn ($a) => [
+                    'id' => $a->id,
+                    'code' => $a->code,
+                    'kind' => $a->kind,
+                    'direction' => $a->direction,
+                    'amount_minor' => $a->amount_minor,
+                    'currency' => $a->currency,
+                    'effective_on' => $a->effective_on?->format('Y-m-d'),
+                    'reason' => $a->reason,
+                    'status' => $a->status,
+                ]),
+            ],
+            'can' => [
+                'adjust' => request()->user()->can('adjustments.request'),
             ],
         ]);
     }

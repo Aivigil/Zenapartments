@@ -12,6 +12,7 @@
                 </div>
             </div>
             <div class="flex gap-2">
+                <a :href="`/bookings/${booking.id}/statement`" target="_blank" class="btn-secondary">📄 Statement (PDF)</a>
                 <Link :href="`/payments/create?booking_id=${booking.id}`" class="btn-primary">+ Record payment</Link>
                 <button v-if="booking.status === 'active'" @click="cancelBooking" class="btn-danger">Cancel</button>
             </div>
@@ -120,6 +121,110 @@
             </table>
         </div>
 
+        <!-- Adjustments -->
+        <div class="mt-6 card">
+            <div class="flex items-center justify-between p-5 border-b border-slate-200">
+                <div>
+                    <h2 class="text-base font-semibold text-slate-900">Adjustments</h2>
+                    <p class="text-xs text-slate-500 mt-1">Waivers, discounts, write-offs, and FX corrections that shift the outstanding balance.</p>
+                </div>
+                <button v-if="can.adjust" @click="showAdjustmentForm = !showAdjustmentForm" class="btn-secondary text-sm">
+                    {{ showAdjustmentForm ? 'Cancel' : '+ Add adjustment' }}
+                </button>
+            </div>
+
+            <table class="min-w-full divide-y divide-slate-200">
+                <thead class="bg-slate-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Code</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Date</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Kind</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Direction</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium uppercase tracking-wide text-slate-500">Amount</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Reason</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Status</th>
+                        <th v-if="can.adjust" class="px-4 py-2"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    <tr v-for="a in booking.adjustments" :key="a.id">
+                        <td class="px-4 py-2 text-sm font-mono text-slate-700">{{ a.code }}</td>
+                        <td class="px-4 py-2 text-sm">{{ a.effective_on }}</td>
+                        <td class="px-4 py-2 text-sm">{{ a.kind.replace('_', ' ') }}</td>
+                        <td class="px-4 py-2 text-sm">
+                            <span :class="['badge', a.direction === 'credit' ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' : 'bg-amber-50 text-amber-700 ring-amber-600/20']">
+                                {{ a.direction === 'credit' ? '↓ Credit' : '↑ Debit' }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2 text-sm text-right"><Money :minor="a.amount_minor" :currency="a.currency" /></td>
+                        <td class="px-4 py-2 text-sm text-slate-600 max-w-md truncate" :title="a.reason">{{ a.reason }}</td>
+                        <td class="px-4 py-2 text-sm">{{ a.status }}</td>
+                        <td v-if="can.adjust" class="px-4 py-2 text-right">
+                            <button v-if="a.status === 'approved'" @click="reverseAdjustment(a)" class="text-sm text-red-600 hover:text-red-800">Reverse</button>
+                        </td>
+                    </tr>
+                    <tr v-if="booking.adjustments.length === 0">
+                        <td :colspan="can.adjust ? 8 : 7" class="px-4 py-6 text-center text-sm text-slate-500">No adjustments on this booking.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <form v-if="showAdjustmentForm && can.adjust" @submit.prevent="submitAdjustment" class="border-t border-slate-200 p-5 bg-slate-50">
+                <div class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <div>
+                        <label class="label">Kind</label>
+                        <select v-model="adjForm.kind" class="input mt-1" required>
+                            <option value="waiver">Waiver</option>
+                            <option value="discount">Discount</option>
+                            <option value="write_off">Write-off</option>
+                            <option value="goodwill">Goodwill</option>
+                            <option value="fx_adjustment">FX adjustment</option>
+                            <option value="manual_debit">Manual debit</option>
+                            <option value="manual_credit">Manual credit</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="label">Direction</label>
+                        <select v-model="adjForm.direction" class="input mt-1" required>
+                            <option value="credit">Credit (↓ outstanding)</option>
+                            <option value="debit">Debit (↑ outstanding)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="label">Amount</label>
+                        <input v-model="adjForm.amount" type="number" step="0.01" class="input mt-1" required />
+                    </div>
+                    <div>
+                        <label class="label">Currency</label>
+                        <select v-model="adjForm.currency" class="input mt-1">
+                            <option value="PKR">PKR</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="label">Effective on</label>
+                        <input v-model="adjForm.effective_on" type="date" class="input mt-1" required />
+                    </div>
+                    <div>
+                        <label class="label">Schedule item (optional)</label>
+                        <select v-model.number="adjForm.schedule_id" class="input mt-1">
+                            <option :value="null">— booking-level —</option>
+                            <option v-for="s in booking.schedules.filter(s => s.status !== 'paid')" :key="s.id" :value="s.id">
+                                #{{ s.sequence_no }} {{ s.label }}
+                            </option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <label class="label">Reason (required, 5+ chars — appears on audit log)</label>
+                    <textarea v-model="adjForm.reason" rows="2" class="input mt-1" required minlength="5" placeholder="e.g. Late fee waived for Eid; approved by Finance Manager via WhatsApp on 2026-04-15."></textarea>
+                </div>
+                <div class="mt-3 flex justify-end gap-2">
+                    <button type="button" @click="showAdjustmentForm = false" class="btn-secondary text-sm">Cancel</button>
+                    <button type="submit" class="btn-primary text-sm" :disabled="adjForm.processing">Post adjustment</button>
+                </div>
+            </form>
+        </div>
+
         <div v-if="booking.notes" class="mt-6 card p-5">
             <h2 class="text-sm font-semibold text-slate-900">Notes</h2>
             <p class="mt-2 text-sm text-slate-700 whitespace-pre-line">{{ booking.notes }}</p>
@@ -128,14 +233,47 @@
 </template>
 
 <script setup>
-import { Link, router } from '@inertiajs/vue3';
+import { ref } from 'vue';
+import { Link, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Money from '@/Components/Money.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 
 const props = defineProps({
     booking: { type: Object, required: true },
+    can: { type: Object, default: () => ({}) },
 });
+
+const showAdjustmentForm = ref(false);
+
+const adjForm = useForm({
+    kind: 'waiver',
+    direction: 'credit',
+    amount: '',
+    currency: 'PKR',
+    effective_on: new Date().toISOString().slice(0, 10),
+    schedule_id: null,
+    reason: '',
+});
+
+function submitAdjustment() {
+    adjForm.post(`/bookings/${props.booking.id}/adjustments`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            adjForm.reset();
+            adjForm.effective_on = new Date().toISOString().slice(0, 10);
+            adjForm.kind = 'waiver';
+            adjForm.direction = 'credit';
+            adjForm.currency = 'PKR';
+            showAdjustmentForm.value = false;
+        },
+    });
+}
+
+function reverseAdjustment(a) {
+    if (!confirm(`Reverse adjustment ${a.code}? This unwinds its effect on the outstanding balance.`)) return;
+    router.delete(`/bookings/${props.booking.id}/adjustments/${a.id}`, { preserveScroll: true });
+}
 
 function statusClass(s) {
     if (s.status === 'paid') return 'bg-emerald-50 text-emerald-700 ring-emerald-600/20';

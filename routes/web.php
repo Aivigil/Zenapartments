@@ -9,7 +9,9 @@ use App\Http\Controllers\Inventory\UnitCategoryController;
 use App\Http\Controllers\Clients\ClientsController;
 use App\Http\Controllers\Clients\NomineesController;
 use App\Http\Controllers\Bookings\BookingsController;
+use App\Http\Controllers\Bookings\AdjustmentsController;
 use App\Http\Controllers\Payments\PaymentsController;
+use App\Http\Controllers\Statements\StatementsController;
 use Illuminate\Support\Facades\Route;
 
 // Auth
@@ -43,8 +45,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('clients/{client}/nominees/{nominee}', [NomineesController::class, 'update'])->name('clients.nominees.update');
     Route::delete('clients/{client}/nominees/{nominee}', [NomineesController::class, 'destroy'])->name('clients.nominees.destroy');
 
-    // Bookings
+    // Bookings + nested adjustments + statement
     Route::resource('bookings', BookingsController::class)->except(['edit', 'update']);
+    Route::post('bookings/{booking}/adjustments', [AdjustmentsController::class, 'store'])->name('bookings.adjustments.store');
+    Route::delete('bookings/{booking}/adjustments/{adjustment}', [AdjustmentsController::class, 'destroy'])->name('bookings.adjustments.destroy');
+    Route::get('bookings/{booking}/statement', [StatementsController::class, 'show'])->name('bookings.statement');
+    Route::get('bookings/{booking}/statement.pdf', [StatementsController::class, 'download'])->name('bookings.statement.pdf');
 
     // Payments (no edit — payments are reversed via DELETE, never edited)
     Route::resource('payments', PaymentsController::class)->except(['edit', 'update']);

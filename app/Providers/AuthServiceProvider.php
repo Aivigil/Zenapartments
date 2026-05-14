@@ -12,6 +12,7 @@ use App\Models\UnitCategory;
 use App\Models\Client;
 use App\Models\Booking;
 use App\Models\Payment;
+use App\Models\Adjustment;
 use App\Policies\ProjectPolicy;
 use App\Policies\BlockPolicy;
 use App\Policies\UnitPolicy;
@@ -19,6 +20,7 @@ use App\Policies\UnitCategoryPolicy;
 use App\Policies\ClientPolicy;
 use App\Policies\BookingPolicy;
 use App\Policies\PaymentPolicy;
+use App\Policies\AdjustmentPolicy;
 
 class AuthServiceProvider extends ServiceProvider
 {
@@ -30,6 +32,7 @@ class AuthServiceProvider extends ServiceProvider
         Client::class => ClientPolicy::class,
         Booking::class => BookingPolicy::class,
         Payment::class => PaymentPolicy::class,
+        Adjustment::class => AdjustmentPolicy::class,
     ];
 
     public function boot(): void
