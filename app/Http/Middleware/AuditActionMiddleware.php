@@ -14,9 +14,13 @@ class AuditActionMiddleware
 {
     public function handle(Request $request, Closure $next): Response
     {
+        $user = $request->user();
+
         $request->attributes->set('audit_context', [
-            'actor_id'   => optional($request->user())->id,
-            'actor_role' => optional($request->user())->getRoleNames()->first(),
+            'actor_id'   => $user?->id,
+            // ?->method()?->method() chains safely — if $user is null OR
+            // getRoleNames() returns null, actor_role becomes null without exploding.
+            'actor_role' => $user?->getRoleNames()?->first(),
             'ip'         => $request->ip(),
             'user_agent' => substr((string) $request->userAgent(), 0, 1000),
             'occurred_at' => now(),

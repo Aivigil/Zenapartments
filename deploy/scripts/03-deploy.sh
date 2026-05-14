@@ -53,6 +53,15 @@ php artisan ziggy:generate resources/js/ziggy.js || true
 # Re-run build if ziggy changed
 npm run build
 
+echo "=== Step 7a: Ensure runtime-writable permissions on storage/ + bootstrap/cache/ ==="
+# PHP-FPM runs as www-data; deploy owns the tree but www-data needs group write.
+# setgid (2 in the leading octet) makes new files inherit the www-data group.
+chown -R deploy:www-data storage bootstrap/cache 2>/dev/null || true
+find storage -type d -exec chmod 2775 {} \; 2>/dev/null || true
+find storage -type f -exec chmod 0664 {} \; 2>/dev/null || true
+find bootstrap/cache -type d -exec chmod 2775 {} \; 2>/dev/null || true
+find bootstrap/cache -type f -exec chmod 0664 {} \; 2>/dev/null || true
+
 echo "=== Step 7: Storage symlink ==="
 php artisan storage:link || true
 
@@ -71,12 +80,14 @@ php artisan route:cache
 php artisan view:cache
 php artisan event:cache
 
-echo "=== Step 10: Restart Horizon + ensure scheduler timer is active ==="
+echo "=== Step 10: Restart Horizon + scheduler + PHP-FPM ==="
 sudo systemctl daemon-reload
 sudo systemctl enable laravel-horizon.service
 sudo systemctl restart laravel-horizon.service || true
 sudo systemctl enable laravel-scheduler.timer
 sudo systemctl restart laravel-scheduler.timer || true
+# Reload PHP-FPM so opcache picks up code changes (opcache.validate_timestamps=0 in prod)
+sudo systemctl reload php8.3-fpm || true
 
 echo "=== Step 11: Verify ==="
 php artisan about | head -30 || true
