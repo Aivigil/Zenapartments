@@ -6,6 +6,8 @@ use App\Http\Controllers\Inventory\ProjectController;
 use App\Http\Controllers\Inventory\BlockController;
 use App\Http\Controllers\Inventory\UnitController;
 use App\Http\Controllers\Inventory\UnitCategoryController;
+use App\Http\Controllers\Clients\ClientsController;
+use App\Http\Controllers\Clients\NomineesController;
 use Illuminate\Support\Facades\Route;
 
 // Auth
@@ -32,6 +34,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ]);
         Route::resource('units', UnitController::class);
     });
+
+    // Clients
+    Route::resource('clients', ClientsController::class);
+    Route::post('clients/{client}/nominees', [NomineesController::class, 'store'])->name('clients.nominees.store');
+    Route::put('clients/{client}/nominees/{nominee}', [NomineesController::class, 'update'])->name('clients.nominees.update');
+    Route::delete('clients/{client}/nominees/{nominee}', [NomineesController::class, 'destroy'])->name('clients.nominees.destroy');
 });
 
 // Healthcheck (no auth) — for uptime monitors

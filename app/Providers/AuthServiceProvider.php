@@ -9,10 +9,12 @@ use App\Models\Project;
 use App\Models\Block;
 use App\Models\Unit;
 use App\Models\UnitCategory;
+use App\Models\Client;
 use App\Policies\ProjectPolicy;
 use App\Policies\BlockPolicy;
 use App\Policies\UnitPolicy;
 use App\Policies\UnitCategoryPolicy;
+use App\Policies\ClientPolicy;
 
 class AuthServiceProvider extends ServiceProvider
 {
@@ -21,6 +23,7 @@ class AuthServiceProvider extends ServiceProvider
         Block::class => BlockPolicy::class,
         Unit::class => UnitPolicy::class,
         UnitCategory::class => UnitCategoryPolicy::class,
+        Client::class => ClientPolicy::class,
     ];
 
     public function boot(): void
