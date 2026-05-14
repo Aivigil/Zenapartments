@@ -12,6 +12,7 @@ use App\Http\Controllers\Bookings\BookingsController;
 use App\Http\Controllers\Bookings\AdjustmentsController;
 use App\Http\Controllers\Payments\PaymentsController;
 use App\Http\Controllers\Statements\StatementsController;
+use App\Http\Controllers\Notifications\NotificationsController;
 use Illuminate\Support\Facades\Route;
 
 // Auth
@@ -54,6 +55,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Payments (no edit — payments are reversed via DELETE, never edited)
     Route::resource('payments', PaymentsController::class)->except(['edit', 'update']);
+
+    // Notifications
+    Route::get('notifications', [NotificationsController::class, 'index'])->name('notifications.index');
+    Route::get('notifications/{notificationLog}', [NotificationsController::class, 'show'])->name('notifications.show');
+    Route::post('notifications/send-for-schedule', [NotificationsController::class, 'sendForSchedule'])->name('notifications.send-for-schedule');
 });
 
 // Healthcheck (no auth) — for uptime monitors

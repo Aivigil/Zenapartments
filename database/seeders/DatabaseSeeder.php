@@ -13,6 +13,7 @@ class DatabaseSeeder extends Seeder
             UsersSeeder::class,
             InventorySeeder::class,
             PlanTemplatesSeeder::class,
+            NotificationTemplatesSeeder::class,
         ]);
     }
 }
