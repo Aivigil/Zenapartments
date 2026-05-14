@@ -39,7 +39,13 @@ if ! grep -q '^APP_KEY=base64:' .env; then
 fi
 
 echo "=== Step 5: NPM install + build ==="
-npm ci
+# Use 'npm install' on first run when no lockfile exists; falls through to
+# lockfile-respecting behaviour once package-lock.json is committed.
+if [[ -f package-lock.json ]]; then
+  npm ci
+else
+  npm install
+fi
 npm run build
 
 echo "=== Step 6: Ziggy routes for the frontend ==="
