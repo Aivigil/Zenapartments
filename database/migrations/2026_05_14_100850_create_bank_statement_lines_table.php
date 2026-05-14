@@ -37,7 +37,12 @@ return new class extends Migration
             $table->string('status')->default('pending');
             $table->json('suggested_matches')->nullable(); // array of {client_id, score, reason}
             $table->foreignId('matched_client_id')->nullable()->references('id')->on('clients');
-            $table->foreignId('matched_payment_id')->nullable()->references('id')->on('payments');
+            // matched_payment_id is a SOFT FK — the payments table has a back-
+            // reference to bank_statement_lines (created in the next migration),
+            // which would form a circular dependency at create time. Integrity is
+            // enforced at the model layer via BankStatementLine::matchedPayment.
+            $table->unsignedBigInteger('matched_payment_id')->nullable();
+            $table->index('matched_payment_id');
             $table->foreignId('reviewed_by')->nullable()->references('id')->on('users');
             $table->timestamp('reviewed_at')->nullable();
             $table->timestamps();
