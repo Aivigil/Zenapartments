@@ -1,0 +1,10 @@
+[Unit]
+Description=Laravel Scheduler (Zen Retreats Portal)
+After=network.target
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+WorkingDirectory=/var/www/zenretreats-portal
+ExecStart=/usr/bin/php /var/www/zenretreats-portal/artisan schedule:run

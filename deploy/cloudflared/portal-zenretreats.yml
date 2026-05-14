@@ -1,0 +1,13 @@
+# Append this entry to /etc/cloudflared/config.yml on aivigil-central-01,
+# BEFORE the catch-all 404 entry. Then:
+#   sudo cloudflared tunnel route dns aivigil-central portal.zenretreatspk.com
+#   sudo systemctl restart cloudflared
+
+ingress:
+  - hostname: portal.zenretreatspk.com
+    service: http://10.10.0.30:80
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 10s
+      keepAliveTimeout: 30s
+      httpHostHeader: portal.zenretreatspk.com
