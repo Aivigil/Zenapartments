@@ -96,7 +96,7 @@ const navSections = computed(() => {
         {
             label: 'Analytics',
             items: [
-                { name: 'Reports',     href: '/reports/collections',    icon: ChartBarIcon,         current: current.startsWith('/reports') && !current.startsWith('/reports/possession') },
+                { name: 'Reports',     href: '/reports',                icon: ChartBarIcon,         current: current.startsWith('/reports') && !current.startsWith('/reports/possession') && !current.startsWith('/reports/forecast') },
                 { name: 'Forecast',    href: '/reports/forecast',       icon: ClockIcon,            current: current.startsWith('/reports/forecast') },
             ],
         },

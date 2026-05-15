@@ -243,11 +243,14 @@ class ReportsController extends Controller
                     ->whereIn('status', ['due', 'partially_paid'])
                     ->where('due_date', '<', $today->toDateString())
                     ->count();
+                // .reorder() clears the inherited orderBy('sequence_no') from the
+                // Booking::schedules() relation — otherwise Postgres rejects the
+                // aggregate query with "must appear in GROUP BY".
                 $overdueAmount = (int) $b->schedules()
                     ->whereIn('status', ['due', 'partially_paid'])
                     ->where('due_date', '<', $today->toDateString())
-                    ->selectRaw('SUM(amount_minor - paid_minor) AS owed')
-                    ->value('owed');
+                    ->reorder()
+                    ->sum(\DB::raw('amount_minor - paid_minor'));
 
                 return [
                     'booking' => $b,
