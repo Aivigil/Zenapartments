@@ -306,14 +306,14 @@ class MigrateSnapshot extends Command
                 $adj->save();
             }
 
-            // Now compute portal-implied outstanding (forward schedule only since past is cancelled) + apply
-            // calibrating adjustment to match the spreadsheet's Total Receivable.
+            // Now compute portal-implied outstanding using Booking::outstandingMinor() which
+            // properly accounts for the historical_credit adjustment we just inserted above.
+            // diff = target - current. Positive diff => need to DEBIT to add outstanding.
             $forwardScheduled = (int) $booking->schedules()
                 ->whereNotIn('status', ['waived', 'written_off', 'cancelled'])
                 ->sum('amount_minor');
 
-            $portalOutstanding = $forwardScheduled; // no payments allocated, no other adjustments yet (we'll fix below)
-
+            $portalOutstanding = $booking->fresh()->outstandingMinor();
             $diff = $totalReceivableMinor - $portalOutstanding;
             // diff > 0 => need to ADD outstanding (debit); diff < 0 => need to REDUCE outstanding (credit)
             if ($diff !== 0) {
