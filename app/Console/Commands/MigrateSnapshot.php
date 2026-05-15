@@ -226,6 +226,9 @@ class MigrateSnapshot extends Command
             $stats['clients_updated']++;
         } else {
             $client = Client::create([
+                // Temporary unique placeholder — code is NOT NULL + UNIQUE.
+                // Replaced below once we have the auto-increment id.
+                'code' => 'TMP-CLI-' . uniqid('', true),
                 'full_name' => $customerName,
                 'primary_phone' => $phone ?: '+92000000000',
                 'nationality' => 'Pakistani',
@@ -256,6 +259,7 @@ class MigrateSnapshot extends Command
             $booking->adjustments()->delete();
         } else {
             $booking = Booking::create([
+                'code' => 'TMP-BKG-' . uniqid('', true),  // replaced below
                 'client_id' => $client->id,
                 'unit_id' => $unit->id,
                 'plan_template_id' => $plans[$planCode]->id,
@@ -284,7 +288,8 @@ class MigrateSnapshot extends Command
         if (! $isRefund) {
             // Mark the historical receipts as a single audit-trail credit
             if ($totalReceivedMinor > 0) {
-                Adjustment::create([
+                $adj = Adjustment::create([
+                    'code' => 'TMP-ADJ-' . uniqid('', true),
                     'booking_id' => $booking->id,
                     'kind' => 'manual_credit',
                     'direction' => 'credit',
@@ -296,7 +301,9 @@ class MigrateSnapshot extends Command
                     'approved_by' => null,
                     'approved_at' => now(),
                     'status' => 'approved',
-                ])->update(['code' => 'ZA-A-' . str_pad((string) Adjustment::max('id'), 5, '0', STR_PAD_LEFT)]);
+                ]);
+                $adj->code = generate_code('ZA-A-', $adj->id, 5);
+                $adj->save();
             }
 
             // Now compute portal-implied outstanding (forward schedule only since past is cancelled) + apply
@@ -310,7 +317,8 @@ class MigrateSnapshot extends Command
             $diff = $totalReceivableMinor - $portalOutstanding;
             // diff > 0 => need to ADD outstanding (debit); diff < 0 => need to REDUCE outstanding (credit)
             if ($diff !== 0) {
-                Adjustment::create([
+                $adj = Adjustment::create([
+                    'code' => 'TMP-ADJ-' . uniqid('', true),
                     'booking_id' => $booking->id,
                     'kind' => 'manual_debit',
                     'direction' => $diff > 0 ? 'debit' : 'credit',
@@ -320,7 +328,9 @@ class MigrateSnapshot extends Command
                     'reason' => "Opening balance calibration (snapshot import). Reconciles forward-schedule total of " . money_format_pkr($forwardScheduled) . " to spreadsheet Total Receivable of " . money_format_pkr($totalReceivableMinor) . ".",
                     'approved_at' => now(),
                     'status' => 'approved',
-                ])->update(['code' => 'ZA-A-' . str_pad((string) Adjustment::max('id'), 5, '0', STR_PAD_LEFT)]);
+                ]);
+                $adj->code = generate_code('ZA-A-', $adj->id, 5);
+                $adj->save();
             }
         }
 
