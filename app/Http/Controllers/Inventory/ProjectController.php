@@ -103,6 +103,92 @@ class ProjectController extends Controller
             ->with('success', "Project {$project->name} archived.");
     }
 
+    /**
+     * Visual grid view — color-coded inventory map per block.
+     *
+     * Each unit card carries enough context to drive tooltips without an
+     * N+1 (status colour, category, active booking client, outstanding).
+     */
+    public function grid(Project $project): Response
+    {
+        $this->authorize('view', $project);
+
+        $project->load([
+            'blocks' => fn ($q) => $q->orderBy('sort_order')->orderBy('code'),
+            'blocks.units' => fn ($q) => $q->with([
+                'category:id,name,kind',
+                'bookings' => fn ($b) => $b->where('status', 'active')
+                    ->with('client:id,code,full_name'),
+            ])->orderBy('code'),
+        ]);
+
+        $blocks = $project->blocks->map(function ($block) {
+            $units = $block->units->map(function ($u) {
+                $b = $u->bookings->first();
+                $outstanding = $b ? $b->outstandingMinor() : null;
+                return [
+                    'id' => $u->id,
+                    'code' => $u->code,
+                    'name' => $u->name,
+                    'status' => $u->status->value,
+                    'status_label' => $u->status->label(),
+                    'colour' => $u->status->colour(),
+                    'category' => $u->category?->name,
+                    'category_kind' => $u->category?->kind,
+                    'base_price_minor' => (int) $u->base_price_minor,
+                    'size' => $u->size_value ? rtrim(rtrim((string) $u->size_value, '0'), '.') . ' ' . $u->size_unit : null,
+                    'booking_id' => $b?->id,
+                    'booking_code' => $b?->code,
+                    'client_id' => $b?->client?->id,
+                    'client_code' => $b?->client?->code,
+                    'client_name' => $b?->client?->full_name,
+                    'outstanding_minor' => $outstanding,
+                ];
+            });
+
+            $statusCounts = $units->groupBy('status')->map->count();
+
+            return [
+                'id' => $block->id,
+                'code' => $block->code,
+                'name' => $block->name,
+                'block_type' => $block->block_type,
+                'units' => $units->values(),
+                'totals' => [
+                    'count' => $units->count(),
+                    'available' => $statusCounts->get('available', 0),
+                    'sold' => $statusCounts->get('sold', 0),
+                    'blocked' => $statusCounts->get('blocked', 0),
+                    'possession' => $statusCounts->get('possession_transferred', 0),
+                    'cancelled' => $statusCounts->get('cancelled', 0),
+                ],
+            ];
+        });
+
+        $allUnits = $blocks->pluck('units')->flatten(1);
+        $totals = [
+            'count' => $allUnits->count(),
+            'available' => $allUnits->where('status', 'available')->count(),
+            'sold' => $allUnits->where('status', 'sold')->count(),
+            'blocked' => $allUnits->where('status', 'blocked')->count(),
+            'possession' => $allUnits->where('status', 'possession_transferred')->count(),
+            'cancelled' => $allUnits->where('status', 'cancelled')->count(),
+            'outstanding_minor' => (int) $allUnits->sum(fn ($u) => $u['outstanding_minor'] ?? 0),
+            'inventory_value_minor' => (int) $allUnits->sum('base_price_minor'),
+        ];
+
+        return Inertia::render('Inventory/Projects/Grid', [
+            'project' => [
+                'id' => $project->id,
+                'code' => $project->code,
+                'name' => $project->name,
+                'location' => $project->location,
+            ],
+            'blocks' => $blocks,
+            'totals' => $totals,
+        ]);
+    }
+
     private function authorize(string $ability, $arg): void
     {
         \Illuminate\Support\Facades\Gate::authorize($ability, $arg);

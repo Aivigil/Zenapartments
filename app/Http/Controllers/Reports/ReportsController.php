@@ -123,6 +123,185 @@ class ReportsController extends Controller
         ]);
     }
 
+    /**
+     * Sales forecast — expected cash-in for the next N days, grouped weekly.
+     * Includes a sanity benchmark (last-month actual collection rate).
+     */
+    public function forecast(Request $request): Response
+    {
+        $request->user()->can('reports.view') || abort(403);
+
+        $today = CarbonImmutable::today();
+        $horizon = (int) $request->integer('days', 90);
+        $horizon = max(30, min(180, $horizon));
+        $end = $today->addDays($horizon);
+
+        // Open schedule items in the window
+        $items = DB::table('schedules')
+            ->join('bookings', 'bookings.id', '=', 'schedules.booking_id')
+            ->whereIn('schedules.status', ['due', 'partially_paid'])
+            ->whereBetween('schedules.due_date', [$today->toDateString(), $end->toDateString()])
+            ->where('bookings.status', 'active')
+            ->selectRaw('schedules.due_date, schedules.category, SUM(schedules.amount_minor - schedules.paid_minor) AS owed_minor, COUNT(*) AS cnt')
+            ->groupBy('schedules.due_date', 'schedules.category')
+            ->orderBy('schedules.due_date')
+            ->get();
+
+        // Bucket into weeks
+        $weeks = [];
+        for ($i = 0; $i * 7 <= $horizon; $i++) {
+            $weekStart = $today->addDays($i * 7);
+            $weekEnd = min($weekStart->addDays(6)->toDateString(), $end->toDateString());
+            $weeks["w{$i}"] = [
+                'key' => "w{$i}",
+                'label' => $weekStart->format('M j') . ' – ' . CarbonImmutable::parse($weekEnd)->format('M j'),
+                'start' => $weekStart->toDateString(),
+                'end' => $weekEnd,
+                'expected_minor' => 0,
+                'count' => 0,
+                'by_category' => [],
+            ];
+        }
+
+        foreach ($items as $row) {
+            $due = CarbonImmutable::parse($row->due_date);
+            $diff = $today->diffInDays($due, false);
+            if ($diff < 0) continue;
+            $bucketIdx = intdiv($diff, 7);
+            $key = "w{$bucketIdx}";
+            if (! isset($weeks[$key])) continue;
+            $weeks[$key]['expected_minor'] += (int) $row->owed_minor;
+            $weeks[$key]['count'] += (int) $row->cnt;
+            $weeks[$key]['by_category'][$row->category] = ($weeks[$key]['by_category'][$row->category] ?? 0) + (int) $row->owed_minor;
+        }
+
+        $weeksArr = array_values($weeks);
+        $totalExpected = collect($weeksArr)->sum('expected_minor');
+        $maxWeekly = collect($weeksArr)->max('expected_minor') ?: 1;
+
+        // Benchmark: actual collections last 30 days vs scheduled-due last 30 days
+        $actualLast30 = (int) DB::table('payments')
+            ->where('status', 'posted')
+            ->where('received_at', '>=', $today->subDays(30)->toDateString())
+            ->sum(DB::raw('COALESCE(pkr_amount_minor, amount_minor)'));
+
+        $scheduledLast30 = (int) DB::table('schedules')
+            ->where('due_date', '>=', $today->subDays(30)->toDateString())
+            ->where('due_date', '<', $today->toDateString())
+            ->sum('amount_minor');
+
+        $collectionRate = $scheduledLast30 > 0 ? round($actualLast30 / $scheduledLast30, 3) : null;
+
+        return Inertia::render('Reports/Forecast', [
+            'today' => $today->format('Y-m-d'),
+            'horizon_days' => $horizon,
+            'weeks' => $weeksArr,
+            'total_expected_minor' => $totalExpected,
+            'max_weekly_minor' => $maxWeekly,
+            'benchmark' => [
+                'actual_last_30_minor' => $actualLast30,
+                'scheduled_last_30_minor' => $scheduledLast30,
+                'collection_rate' => $collectionRate,
+                'adjusted_forecast_minor' => $collectionRate ? (int) round($totalExpected * $collectionRate) : null,
+            ],
+        ]);
+    }
+
+    /**
+     * Possession-due tracker. Bookings approaching possession:
+     *   - status='active' AND (% paid >= 90% OR final installment in next 60 days).
+     * Drives the "who's about to take possession" workflow.
+     */
+    public function possession(Request $request): Response
+    {
+        $request->user()->can('reports.view') || abort(403);
+
+        $today = CarbonImmutable::today();
+        $windowEnd = $today->addDays(60);
+
+        $bookings = Booking::query()
+            ->with(['client:id,code,full_name,primary_phone,email', 'unit:id,code,name,unit_category_id', 'unit.category:id,name'])
+            ->where('status', 'active')
+            ->orderBy('id')
+            ->get()
+            ->map(function ($b) use ($today) {
+                $scheduled = (int) $b->schedules()
+                    ->whereNotIn('status', ['waived', 'written_off', 'cancelled'])
+                    ->sum('amount_minor');
+                $outstanding = $b->outstandingMinor();
+                $paid = max(0, $scheduled - $outstanding);
+                $pct = $scheduled > 0 ? round(($paid / $scheduled) * 100, 1) : 0;
+
+                $lastSch = $b->schedules()
+                    ->whereNotIn('status', ['waived', 'written_off', 'cancelled'])
+                    ->orderByDesc('due_date')
+                    ->first();
+                $finalDue = $lastSch?->due_date;
+
+                $overdueItems = $b->schedules()
+                    ->whereIn('status', ['due', 'partially_paid'])
+                    ->where('due_date', '<', $today->toDateString())
+                    ->count();
+                $overdueAmount = (int) $b->schedules()
+                    ->whereIn('status', ['due', 'partially_paid'])
+                    ->where('due_date', '<', $today->toDateString())
+                    ->selectRaw('SUM(amount_minor - paid_minor) AS owed')
+                    ->value('owed');
+
+                return [
+                    'booking' => $b,
+                    'pct_paid' => $pct,
+                    'paid_minor' => $paid,
+                    'total_minor' => $scheduled,
+                    'outstanding_minor' => $outstanding,
+                    'final_due_date' => $finalDue?->format('Y-m-d'),
+                    'days_to_final' => $finalDue ? $today->diffInDays(CarbonImmutable::parse($finalDue), false) : null,
+                    'overdue_items' => $overdueItems,
+                    'overdue_amount_minor' => $overdueAmount,
+                ];
+            })
+            ->filter(function ($r) use ($windowEnd, $today) {
+                if ($r['pct_paid'] >= 90) return true;
+                if ($r['final_due_date'] && CarbonImmutable::parse($r['final_due_date'])->between($today, $windowEnd)) return true;
+                return false;
+            })
+            ->sortByDesc('pct_paid')
+            ->values()
+            ->map(fn ($r) => [
+                'id' => $r['booking']->id,
+                'code' => $r['booking']->code,
+                'client_id' => $r['booking']->client_id,
+                'client_code' => $r['booking']->client?->code,
+                'client_name' => $r['booking']->client?->full_name,
+                'phone' => $r['booking']->client?->primary_phone,
+                'email' => $r['booking']->client?->email,
+                'unit_code' => $r['booking']->unit?->code,
+                'unit_name' => $r['booking']->unit?->name,
+                'unit_category' => $r['booking']->unit?->category?->name,
+                'total_minor' => $r['total_minor'],
+                'paid_minor' => $r['paid_minor'],
+                'outstanding_minor' => $r['outstanding_minor'],
+                'pct_paid' => $r['pct_paid'],
+                'final_due_date' => $r['final_due_date'],
+                'days_to_final' => $r['days_to_final'],
+                'overdue_items' => $r['overdue_items'],
+                'overdue_amount_minor' => $r['overdue_amount_minor'],
+                'eligible' => $r['pct_paid'] >= 100 && $r['overdue_items'] === 0,
+            ]);
+
+        return Inertia::render('Reports/Possession', [
+            'today' => $today->format('Y-m-d'),
+            'window_end' => $windowEnd->format('Y-m-d'),
+            'bookings' => $bookings,
+            'totals' => [
+                'count' => $bookings->count(),
+                'eligible_count' => $bookings->where('eligible', true)->count(),
+                'over_90_count' => $bookings->where('pct_paid', '>=', 90)->count(),
+                'outstanding_total' => (int) $bookings->sum('outstanding_minor'),
+            ],
+        ]);
+    }
+
     public function collections(Request $request): Response
     {
         $request->user()->can('reports.view') || abort(403);

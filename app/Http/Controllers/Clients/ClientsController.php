@@ -102,6 +102,25 @@ class ClientsController extends Controller
             'bookings' => fn ($q) => $q->with('unit:id,code,name')->latest('booking_date'),
         ]);
 
+        $portalTokens = \App\Models\ClientPortalToken::where('client_id', $client->id)
+            ->with('booking:id,code', 'creator:id,name')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn ($t) => [
+                'id' => $t->id,
+                'token' => $t->token,
+                'label' => $t->label,
+                'url' => url("/c/{$t->token}"),
+                'booking_id' => $t->booking_id,
+                'booking_code' => $t->booking?->code,
+                'expires_at' => $t->expires_at?->format('Y-m-d'),
+                'last_used_at' => $t->last_used_at?->format('Y-m-d H:i'),
+                'use_count' => $t->use_count,
+                'revoked_at' => $t->revoked_at?->format('Y-m-d H:i'),
+                'created_by' => $t->creator?->name,
+                'is_active' => $t->isActive(),
+            ]);
+
         return Inertia::render('Clients/Show', [
             'client' => [
                 'id' => $client->id,
@@ -142,9 +161,11 @@ class ClientsController extends Controller
                     'currency' => $b->currency,
                 ]),
             ],
+            'portal_tokens' => $portalTokens,
             'can' => [
                 'edit' => request()->user()->can('clients.manage'),
                 'verify_kyc' => request()->user()->can('clients.kyc'),
+                'mint_portal_token' => request()->user()->can('clients.manage'),
             ],
         ]);
     }

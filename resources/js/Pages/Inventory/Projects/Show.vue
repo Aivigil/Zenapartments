@@ -8,6 +8,7 @@
                 <div class="mt-2"><StatusBadge :status="project.status" :label="project.status" /></div>
             </div>
             <div class="flex gap-2">
+                <Link :href="`/inventory/projects/${project.id}/grid`" class="btn-secondary">View grid</Link>
                 <Link :href="`/inventory/projects/${project.id}/edit`" class="btn-secondary">Edit</Link>
                 <Link :href="`/inventory/projects/${project.id}/blocks/create`" class="btn-primary">+ Add block</Link>
             </div>

@@ -128,6 +128,74 @@
             </table>
         </div>
 
+        <!-- Portal access -->
+        <div class="mt-6 card">
+            <div class="flex items-center justify-between p-5 border-b border-slate-200">
+                <div>
+                    <h2 class="text-base font-semibold text-slate-900">Client portal access</h2>
+                    <p class="mt-1 text-xs text-slate-500">Generate a no-password link the client opens from WhatsApp to see their statement, next due date, and download receipts.</p>
+                </div>
+                <button v-if="can.mint_portal_token" @click="showTokenForm = !showTokenForm" class="btn-secondary text-sm">+ New link</button>
+            </div>
+
+            <form v-if="showTokenForm && can.mint_portal_token" @submit.prevent="submitToken" class="border-b border-slate-200 p-5 bg-slate-50 grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <input v-model="tokenForm.label" type="text" placeholder="Label (e.g. 'WhatsApp Apr 14')" class="input sm:col-span-2" />
+                <select v-model="tokenForm.booking_id" class="input">
+                    <option :value="null">All this client's bookings</option>
+                    <option v-for="b in client.bookings" :key="b.id" :value="b.id">{{ b.code }} ({{ b.unit_code }})</option>
+                </select>
+                <select v-model="tokenForm.expires_in_days" class="input">
+                    <option :value="30">Expires in 30 days</option>
+                    <option :value="90">Expires in 90 days</option>
+                    <option :value="180">Expires in 180 days</option>
+                    <option :value="365">Expires in 1 year</option>
+                </select>
+                <div class="sm:col-span-4 flex gap-2 justify-end">
+                    <button type="button" @click="showTokenForm = false" class="btn-secondary text-sm">Cancel</button>
+                    <button type="submit" class="btn-primary text-sm" :disabled="tokenForm.processing">Generate link</button>
+                </div>
+            </form>
+
+            <table class="min-w-full divide-y divide-slate-200">
+                <thead class="bg-slate-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Label / scope</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500">URL</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Expires</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Last used</th>
+                        <th class="px-4 py-2"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    <tr v-for="t in client.portal_tokens || []" :key="t.id" :class="!t.is_active ? 'opacity-60' : ''">
+                        <td class="px-4 py-2 text-sm">
+                            <div>{{ t.label }}</div>
+                            <div class="text-xs text-slate-500">{{ t.booking_code ? `Booking ${t.booking_code}` : 'All bookings' }} · by {{ t.created_by || 'system' }}</div>
+                        </td>
+                        <td class="px-4 py-2 text-sm">
+                            <div class="flex items-center gap-2">
+                                <code class="text-xs bg-slate-100 px-2 py-1 rounded font-mono truncate max-w-md">{{ t.url }}</code>
+                                <button @click="copy(t.url)" class="text-xs text-brand hover:underline" title="Copy to clipboard">Copy</button>
+                                <a :href="`https://wa.me/?text=${encodeURIComponent(`Your Zen Retreats portal: ${t.url}`)}`" target="_blank" class="text-xs text-emerald-700 hover:underline">WhatsApp</a>
+                            </div>
+                        </td>
+                        <td class="px-4 py-2 text-xs text-slate-500">{{ t.expires_at || 'No expiry' }}</td>
+                        <td class="px-4 py-2 text-xs text-slate-500">
+                            <div v-if="t.last_used_at">{{ t.last_used_at }} ({{ t.use_count }} views)</div>
+                            <div v-else class="text-slate-400">never</div>
+                            <div v-if="t.revoked_at" class="text-red-600">revoked {{ t.revoked_at }}</div>
+                        </td>
+                        <td class="px-4 py-2 text-right">
+                            <button v-if="t.is_active && can.mint_portal_token" @click="revokeToken(t)" class="text-sm text-red-600 hover:text-red-800">Revoke</button>
+                        </td>
+                    </tr>
+                    <tr v-if="!client.portal_tokens || client.portal_tokens.length === 0">
+                        <td colspan="5" class="px-4 py-6 text-center text-sm text-slate-500">No portal links yet. Generate one to share with the client.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
         <div v-if="client.notes" class="mt-6 card p-5">
             <h2 class="text-sm font-semibold text-slate-900">Notes</h2>
             <p class="mt-2 text-sm text-slate-700 whitespace-pre-line">{{ client.notes }}</p>
@@ -148,12 +216,19 @@ const props = defineProps({
 });
 
 const showNomineeForm = ref(false);
+const showTokenForm = ref(false);
 
 const nomineeForm = useForm({
     full_name: '',
     relationship: '',
     cnic: '',
     phone: '',
+});
+
+const tokenForm = useForm({
+    label: '',
+    booking_id: null,
+    expires_in_days: 180,
 });
 
 function openNomineeForm() {
@@ -171,5 +246,21 @@ function submitNominee() {
 function removeNominee(n) {
     if (!confirm(`Remove nominee ${n.full_name}?`)) return;
     router.delete(`/clients/${props.client.id}/nominees/${n.id}`, { preserveScroll: true });
+}
+
+function submitToken() {
+    tokenForm.post(`/clients/${props.client.id}/portal-tokens`, {
+        preserveScroll: true,
+        onSuccess: () => { showTokenForm.value = false; tokenForm.reset(); },
+    });
+}
+
+function revokeToken(t) {
+    if (!confirm(`Revoke portal link "${t.label}"? The client will lose access immediately.`)) return;
+    router.delete(`/clients/${props.client.id}/portal-tokens/${t.id}`, { preserveScroll: true });
+}
+
+function copy(text) {
+    navigator.clipboard.writeText(text);
 }
 </script>
