@@ -165,7 +165,8 @@ class ReportsController extends Controller
 
         foreach ($items as $row) {
             $due = CarbonImmutable::parse($row->due_date);
-            $diff = $today->diffInDays($due, false);
+            // Carbon 3 returns float from diffInDays — cast to int for intdiv
+            $diff = (int) $today->diffInDays($due, false);
             if ($diff < 0) continue;
             $bucketIdx = intdiv($diff, 7);
             $key = "w{$bucketIdx}";
@@ -255,14 +256,17 @@ class ReportsController extends Controller
                     'total_minor' => $scheduled,
                     'outstanding_minor' => $outstanding,
                     'final_due_date' => $finalDue?->format('Y-m-d'),
-                    'days_to_final' => $finalDue ? $today->diffInDays(CarbonImmutable::parse($finalDue), false) : null,
+                    'days_to_final' => $finalDue ? (int) $today->diffInDays(CarbonImmutable::parse($finalDue->format('Y-m-d')), false) : null,
                     'overdue_items' => $overdueItems,
                     'overdue_amount_minor' => $overdueAmount,
                 ];
             })
             ->filter(function ($r) use ($windowEnd, $today) {
                 if ($r['pct_paid'] >= 90) return true;
-                if ($r['final_due_date'] && CarbonImmutable::parse($r['final_due_date'])->between($today, $windowEnd)) return true;
+                if ($r['final_due_date']) {
+                    $fd = CarbonImmutable::parse($r['final_due_date']);
+                    if ($fd->greaterThanOrEqualTo($today) && $fd->lessThanOrEqualTo($windowEnd)) return true;
+                }
                 return false;
             })
             ->sortByDesc('pct_paid')
