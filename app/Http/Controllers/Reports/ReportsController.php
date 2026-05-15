@@ -331,12 +331,16 @@ class ReportsController extends Controller
             ->groupBy('due_date')
             ->get();
 
-        $bucketResults = collect($buckets)->map(fn ($b) => array_merge($b, ['owed_minor' => 0, 'count' => 0]))->keyBy('key');
+        // Plain array keyed by bucket key — Collections don't support
+        // `$col[$k]['nested'] +=` (returns by value, mutation lost / fatal on 8.4).
+        $bucketResults = [];
+        foreach ($buckets as $b) {
+            $bucketResults[$b['key']] = array_merge($b, ['owed_minor' => 0, 'count' => 0]);
+        }
 
         foreach ($openSchedules as $row) {
-            $daysOverdue = $today->diffInDays(CarbonImmutable::parse($row->due_date), false) * -1;
-            // future: dueDate > today → daysOverdue negative
-            // current/overdue: daysOverdue >= 0
+            // Cast to int — Carbon 3 returns float from diffInDays
+            $daysOverdue = (int) ($today->diffInDays(CarbonImmutable::parse($row->due_date), false) * -1);
 
             $matched = null;
             foreach ($buckets as $b) {
@@ -347,11 +351,11 @@ class ReportsController extends Controller
             }
             if ($matched) {
                 $bucketResults[$matched]['owed_minor'] += (int) $row->owed_minor;
-                $bucketResults[$matched]['count'] += (int) $row->cnt;
+                $bucketResults[$matched]['count']      += (int) $row->cnt;
             }
         }
 
-        $bucketArray = $bucketResults->values()->toArray();
+        $bucketArray = array_values($bucketResults);
         $totalOwedOverdue = collect($bucketArray)->filter(fn ($b) => $b['key'] !== 'future')->sum('owed_minor');
         $totalOwedAll = collect($bucketArray)->sum('owed_minor');
 
