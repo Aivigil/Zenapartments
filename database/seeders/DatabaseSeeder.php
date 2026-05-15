@@ -14,6 +14,8 @@ class DatabaseSeeder extends Seeder
             InventorySeeder::class,
             PlanTemplatesSeeder::class,
             NotificationTemplatesSeeder::class,
+            ZenApartmentsProjectSeeder::class,
+            ZenApartmentsPlansSeeder::class,
         ]);
     }
 }

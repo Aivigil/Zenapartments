@@ -15,6 +15,7 @@ use App\Http\Controllers\Statements\StatementsController;
 use App\Http\Controllers\Notifications\NotificationsController;
 use App\Http\Controllers\Reconciliation\ReconciliationController;
 use App\Http\Controllers\Reports\ReportsController;
+use App\Http\Controllers\Reports\OpeningBalancesController;
 use Illuminate\Support\Facades\Route;
 
 // Auth
@@ -74,6 +75,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Reports
     Route::get('reports', fn () => redirect()->route('reports.collections'))->name('reports.index');
     Route::get('reports/collections', [ReportsController::class, 'collections'])->name('reports.collections');
+    Route::get('reports/opening-balances', [OpeningBalancesController::class, 'show'])->name('reports.opening-balances');
 });
 
 // Healthcheck (no auth) — for uptime monitors
