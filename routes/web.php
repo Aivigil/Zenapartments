@@ -16,6 +16,10 @@ use App\Http\Controllers\Notifications\NotificationsController;
 use App\Http\Controllers\Reconciliation\ReconciliationController;
 use App\Http\Controllers\Reports\ReportsController;
 use App\Http\Controllers\Reports\OpeningBalancesController;
+use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\Admin\UsersController;
+use App\Http\Controllers\Admin\RolesController;
+use App\Http\Controllers\Admin\AuditController;
 use Illuminate\Support\Facades\Route;
 
 // Auth
@@ -75,7 +79,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Reports
     Route::get('reports', fn () => redirect()->route('reports.collections'))->name('reports.index');
     Route::get('reports/collections', [ReportsController::class, 'collections'])->name('reports.collections');
+    Route::get('reports/cash-flow', [ReportsController::class, 'cashFlow'])->name('reports.cash-flow');
+    Route::get('reports/booking-summary', [ReportsController::class, 'bookingSummary'])->name('reports.booking-summary');
     Route::get('reports/opening-balances', [OpeningBalancesController::class, 'show'])->name('reports.opening-balances');
+
+    // Admin
+    Route::get('admin', [AdminController::class, 'index'])->name('admin.index');
+    Route::resource('admin/users', UsersController::class)->names('admin.users');
+    Route::get('admin/roles', [RolesController::class, 'index'])->name('admin.roles');
+    Route::get('admin/audit', [AuditController::class, 'index'])->name('admin.audit');
 });
 
 // Healthcheck (no auth) — for uptime monitors

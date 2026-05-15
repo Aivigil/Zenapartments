@@ -15,6 +15,114 @@ use Inertia\Response;
 
 class ReportsController extends Controller
 {
+    public function cashFlow(Request $request): Response
+    {
+        $request->user()->can('reports.view') || abort(403);
+
+        $today = CarbonImmutable::today();
+        $startMonth = $today->subMonthsNoOverflow(11)->startOfMonth();
+
+        $byMonth = DB::table('payments')
+            ->where('status', 'posted')
+            ->where('received_at', '>=', $startMonth->toDateString())
+            ->selectRaw("to_char(received_at, 'YYYY-MM') AS month, channel, SUM(COALESCE(pkr_amount_minor, amount_minor)) AS total_minor, COUNT(*) AS cnt")
+            ->groupBy('month', 'channel')
+            ->orderBy('month')
+            ->get();
+
+        // Init 12 month buckets so months with no payments still show
+        $months = [];
+        $channels = ['bank_transfer', 'cash', 'cheque', 'online_gateway', 'foreign_wire'];
+        for ($i = 0; $i < 12; $i++) {
+            $m = $today->subMonthsNoOverflow(11 - $i);
+            $key = $m->format('Y-m');
+            $months[$key] = [
+                'month' => $key,
+                'label' => $m->format('M Y'),
+                'total_minor' => 0,
+                'count' => 0,
+                'by_channel' => array_fill_keys($channels, 0),
+            ];
+        }
+        foreach ($byMonth as $row) {
+            if (!isset($months[$row->month])) continue;
+            $months[$row->month]['total_minor'] += (int) $row->total_minor;
+            $months[$row->month]['count'] += (int) $row->cnt;
+            $months[$row->month]['by_channel'][$row->channel] = (int) $row->total_minor;
+        }
+
+        $monthsArr = array_values($months);
+        $cashInTotal = collect($monthsArr)->sum('total_minor');
+        $cashInMax = collect($monthsArr)->max('total_minor') ?: 1;
+
+        $channelTotals = [];
+        foreach ($channels as $c) {
+            $channelTotals[$c] = collect($monthsArr)->sum(fn ($m) => $m['by_channel'][$c]);
+        }
+
+        return Inertia::render('Reports/CashFlow', [
+            'months' => $monthsArr,
+            'total_minor' => $cashInTotal,
+            'max_minor' => $cashInMax,
+            'channel_totals' => $channelTotals,
+            'channels' => $channels,
+        ]);
+    }
+
+    public function bookingSummary(Request $request): Response
+    {
+        $request->user()->can('reports.view') || abort(403);
+
+        $bookings = \App\Models\Booking::query()
+            ->with(['client:id,code,full_name', 'unit:id,code,name', 'unit.category:id,name', 'planTemplate:id,code'])
+            ->where('status', 'active')
+            ->orderBy('id')
+            ->get()
+            ->map(function ($b) {
+                $scheduled = (int) $b->schedules()
+                    ->whereNotIn('status', ['waived', 'written_off', 'cancelled'])
+                    ->sum('amount_minor');
+                $outstanding = $b->outstandingMinor();
+                $paid = max(0, $scheduled - $outstanding);
+                $overdueItems = $b->schedules()
+                    ->whereIn('status', ['due', 'partially_paid'])
+                    ->where('due_date', '<', today())
+                    ->count();
+                $nextDue = $b->schedules()
+                    ->whereIn('status', ['due', 'partially_paid'])
+                    ->where('due_date', '>=', today())
+                    ->orderBy('due_date')
+                    ->first();
+
+                return [
+                    'id' => $b->id,
+                    'code' => $b->code,
+                    'client_id' => $b->client_id,
+                    'client_code' => $b->client?->code,
+                    'client_name' => $b->client?->full_name,
+                    'unit_code' => $b->unit?->code,
+                    'unit_category' => $b->unit?->category?->name,
+                    'plan_code' => $b->planTemplate?->code,
+                    'total_minor' => $b->total_price_minor,
+                    'paid_minor' => $paid,
+                    'outstanding_minor' => $outstanding,
+                    'overdue_items' => $overdueItems,
+                    'next_due_date' => $nextDue?->due_date?->format('Y-m-d'),
+                    'next_due_amount_minor' => $nextDue ? ($nextDue->amount_minor - $nextDue->paid_minor) : null,
+                ];
+            });
+
+        return Inertia::render('Reports/BookingSummary', [
+            'bookings' => $bookings,
+            'totals' => [
+                'count' => $bookings->count(),
+                'contract_total' => $bookings->sum('total_minor'),
+                'paid_total' => $bookings->sum('paid_minor'),
+                'outstanding_total' => $bookings->sum('outstanding_minor'),
+            ],
+        ]);
+    }
+
     public function collections(Request $request): Response
     {
         $request->user()->can('reports.view') || abort(403);
